@@ -1,4 +1,6 @@
 #include <FastLED.h>
+#include <SoftwareSerial.h>
+#include <DFPlayer_Mini_Mp3.h>
 #define NUM_LEDS 300
 #define DATA_PIN 5
 #define LED_TYPE WS2812B
@@ -6,7 +8,6 @@
 CRGB leds[NUM_LEDS];
 short randNumber;
 short randomIncteaseLight;
-asd
 int sendData[3];
 // [0] - тип устройста
 // [1] - код
@@ -28,13 +29,13 @@ void SendBoxStatus(int statusWalue) {
   sendData[1] = statusWalue;
   sendData[2] = sendData[0] + sendData[1];
   if (radio.write(&sendData, sizeof(sendData))) {
-    Serial.print("Отправка прошла успешно, значение: ");
+    Serial.print("Sending was successful, value: ");
     Serial.print(sendData[0]);
     Serial.print(sendData[1]);
     Serial.print(sendData[2]);
     Serial.println("                                                ");
   } else {
-    Serial.print("Ошибка отправки, значение: ");
+    Serial.print("Send error, value: ");
     Serial.println(sendData[1]);
   }
 }
@@ -78,11 +79,18 @@ void setup() {
   //radio.openWritingPipe (0xAABBCCDD66LL);
 
   radio.openReadingPipe (1, 0xAABBCCDD12LL);
-  Serial.print("Статус контейнера: ");
+  Serial.println("Mode: ");
   Serial.println(EEPROM.read(0));
+  Serial.println("Volume: ");
+  Serial.println(EEPROM.read(1));
   printBoxStatus();
-  Serial.println("Запущен");
+  delay(300);
+  mp3_set_serial(Serial);
+  mp3_set_volume (EEPROM.read(1));//0-30
+  mp3_set_EQ(0);//0-5
+  mp3_single_loop (true);
   delay(3000);
+  mp3_play (EEPROM.read(0));
 }
 
 unsigned long timing;
@@ -90,21 +98,36 @@ void loop() {
   RGBcontrol(EEPROM.read(0));
   printBoxStatus();
   if (millis() - timing > 300) {
-    Serial.println("Слушаю радио эфир");
+    Serial.println("listen to the radio");
     timing = millis();
     delay (20);
     radio.startListening  ();
     delay (50);
     if (radio.available(&pipe)) {
-      Serial.print("принял что то: ");
+      Serial.print("Get something: ");
       byte radioInput;
       radio.read(&radioInput, sizeof(radioInput));
       Serial.println(radioInput);
-      EEPROM.write(0, radioInput);
+      if(radioInput >= 1 && radioInput <= 9)//(1-4 используються) 1-9 зарезервированны под основные режимы рабботы контейнера
+      {
+        EEPROM.write(0, radioInput);
+        Serial.print("wrote in mode: ");
+        Serial.println(radioInput);
+        mp3_play (EEPROM.read(0));
+        delay(500);
+      }
+      if(radioInput >= 11 && radioInput <= 19)//(11-16 используються) 11-19 Громкость звука
+      {
+        EEPROM.write(1, (radioInput-10)*5);
+        Serial.print("recorded in volume: ");
+        Serial.println((radioInput-10)*5);
+        mp3_set_volume (EEPROM.read(1));
+        delay(500);
+      }
     }
     delay (20);
     radio.stopListening();
-    Serial.println("Не слушаю радио эфир");
+    Serial.println("I don't listen to the radio");
     delay (50);
   }
 }
